@@ -3,6 +3,8 @@ __author__ = "Matteo Golin"
 
 # Imports
 from typing import Self, Callable
+import operator
+from progress.bar import Bar
 
 # Constants
 INPUT_FILE = "./input.txt"
@@ -11,7 +13,8 @@ INPUT_FILE = "./input.txt"
 # Main
 class Monkey:
 
-    jungle = {}
+    jungle: dict[int, Self] = {}
+    big_num: int = 1
 
     def __init__(
             self,
@@ -31,15 +34,42 @@ class Monkey:
         self.inspections: int = 0
 
         self.__class__.jungle[_id] = self  # Store the monkey in a searchable way
+        self.__class__.big_num *= test  # Store the big num for reducing worry
 
     @staticmethod
     def parse_operation(operation: str, test: int) -> Callable:
 
         """Returns a lambda that performs the operation."""
 
-        def operation_lambda(old: int) -> tuple[bool, int]:
-            newop = operation.replace("old", str(old))
-            new = eval(newop) // 3
+        # Create operation
+        operation = operation.split(" ")
+
+        # Get operator
+        match operation[1]:
+            case "*":
+                op = operator.mul
+            case "/":
+                op = operator.truediv
+            case "+":
+                op = operator.add
+            case "-":
+                op = operator.sub
+            case _:
+                raise ValueError("Invalid operator.")
+
+        def operation_lambda(old: int, relief: bool) -> tuple[bool, int]:
+
+            # Get second value
+            second = None
+            if operation[2] != "old":
+                second = int(operation[2])
+
+            # Two old values
+            if not second:
+                second = old
+
+            new = op(old, second)
+            new = new // 3 if relief else new
             return new % test == 0, new
 
         return operation_lambda
@@ -76,19 +106,23 @@ class Monkey:
             operation=operation
         )
 
-    def take_turn(self):
+    def take_turn(self, relief: bool = True):
 
         """The monkey inspects and throws items to other monkeys."""
 
         for item in self.items:
 
             # Perform operation
-            test_passed, new_worry = self.operation(item)
+            test_passed, new_worry = self.operation(item, relief)
             self.inspections += 1
+
+            # Reduce worry non-destructively
+            new_worry %= self.big_num
 
             # Select monkey to throw to
             if test_passed:
                 next_id = self.pass_id
+
             else:
                 next_id = self.fail_id
 
@@ -121,15 +155,38 @@ def main():
         for monkey in Monkey.jungle.values():
             monkey.take_turn()
 
-        # Show after each round
+    two_highest = sorted(Monkey.jungle.values(), key=lambda x: x.inspections, reverse=True)[:2]
+    monkey_business = two_highest[0].inspections * two_highest[1].inspections
+    print(f"The level of monkey business is: {monkey_business}.")
+
+    # Part 2
+    # What is the monkey business if worry levels are no longer divided by three after inspection
+
+    # Reset monkeys
+    Monkey.jungle = {}
+    Monkey.big_num = 1
+    for monkey in raw_monkeys:
+        Monkey.from_input(monkey)
+
+    # 1000 Rounds
+    bar = Bar("Rounds", max=10_000)
+    for _ in range(10_000):
+
+        # Loop through monkeys
+        for monkey in Monkey.jungle.values():
+            monkey.take_turn(relief=False)
+
         # print(f"Round {_ + 1} results: ")
         # for print_monkey in Monkey.jungle.values():
         #     print(print_monkey)
         # print()
 
+        bar.next()
+    bar.finish()
+
     two_highest = sorted(Monkey.jungle.values(), key=lambda x: x.inspections, reverse=True)[:2]
     monkey_business = two_highest[0].inspections * two_highest[1].inspections
-    print(f"The level of monkey business is: {monkey_business}.")
+    print(f"The level of monkey business without reducing worry is: {monkey_business}.")
 
 
 if __name__ == '__main__':
