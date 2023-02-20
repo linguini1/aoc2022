@@ -138,6 +138,9 @@ def simulate(sand_source: Coordinates, map: Map) -> int:
             except IndexError:  # Catch grains flowing into the abyss (out of bounds)
                 return sand_grains
 
+        if start == sand_source:
+            return sand_grains + 1
+
         # Update map
         map[start[1]][start[0]] = RESTING_SAND
         sand_grains += 1  # One more for every piece of sand that comes to rest
@@ -160,6 +163,12 @@ def main():
         for line in file:
             paths.append(path_from_line(line, bounding_coordinates))
 
+    # Part 1
+
+    bounding_coordinates["max_y"] += 2  # Increase Y by two for the sake of part 2
+    # Increase the max Y so that there is space for sand to build up
+    bounding_coordinates["max_x"] += round((bounding_coordinates["max_x"] - bounding_coordinates["min_x"]) * 5.5)
+
     # Correct paths using the bounds
     paths = correct_paths(paths, bounding_coordinates["min_x"], bounding_coordinates["min_y"])
     x_dimension = bounding_coordinates["max_x"] - bounding_coordinates["min_x"]
@@ -168,12 +177,20 @@ def main():
 
     # Create map
     map = create_map(paths, x_dimension, y_dimension, corrected_sand)
-    print_map(map)
 
     # Simulate
     grains = simulate(corrected_sand, map)
     print(f"There are {grains} grains of sand that come to rest before flowing into the abyss.")
-    print_map(map)
+
+    # Part 2
+
+    # Include infinite line
+    paths.append([(0, y_dimension), (x_dimension, y_dimension)])
+
+    # Reset the map
+    map = create_map(paths, x_dimension, y_dimension, corrected_sand)
+    grains = simulate(corrected_sand, map)
+    print(f"There are {grains} grains of sand before the source is blocked.")
 
 
 if __name__ == "__main__":
