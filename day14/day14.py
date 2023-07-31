@@ -177,9 +177,11 @@ def main():
 
     # Create map
     map = create_map(paths, x_dimension, y_dimension, corrected_sand)
+    print_map(map)
 
     # Simulate
     grains = simulate(corrected_sand, map)
+    print_map(map)
     print(f"There are {grains} grains of sand that come to rest before flowing into the abyss.")
 
     # Part 2
