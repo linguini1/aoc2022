@@ -46,39 +46,35 @@ def collapse(graph: ValveSystem, valves: dict[str, Valve], start: str) -> None:
         del graph[valve.name]
 
 
-def most_pressure(time: int, pos: str, graph: ValveSystem, visited: tuple, cache: dict[tuple, int]) -> int:
+def most_pressure(time: int, pos: str, graph: ValveSystem, opened: tuple, cache: dict[tuple, int]) -> int:
     """Returns the most pressure that can be released in 'time' minutes given the condensed graph."""
 
-    def new_visited(v: str) -> tuple:
-        s = [_ for _ in visited] + [v]
+    def add_opened(v: str) -> tuple:
+        s = [_ for _ in opened] + [v]
         s.sort()
         return tuple(s)
 
-    state = (time, pos, visited)
+    if time <= 0:
+        return 0
+
+    state = (time, pos, opened)
     if state in cache:
         return cache[state]
 
     pressure = 0
     for valve, cost in graph[pos]:
-        # Don't reopen closed valves
-        if valve.name in visited:
-            continue
 
-        # First option: open
-        time_remaining = time - cost - 1
-        current_pressure = valve.flow * time_remaining
-        opened_pressure = 0
-        if time_remaining > 0:
-            opened_pressure = (
-                most_pressure(time_remaining, valve.name, graph, new_visited(valve.name), cache) + current_pressure
+        # First option: open; Don't reopen closed valves
+        if valve.name not in opened:
+            time_remaining = time - cost - 1
+            current_pressure = valve.flow * time_remaining
+            pressure = max(
+                pressure,
+                most_pressure(time_remaining, valve.name, graph, add_opened(valve.name), cache) + current_pressure,
             )
 
         # Second option: pass
-        passed_pressure = 0
-        if time - cost > 0:
-            passed_pressure = most_pressure(time - cost, valve.name, graph, visited, cache)
-
-        pressure = max(pressure, opened_pressure, passed_pressure)
+        pressure = max(pressure, most_pressure(time - cost, valve.name, graph, opened, cache))
 
     cache[state] = pressure
     return pressure
@@ -104,7 +100,6 @@ if __name__ == "__main__":
     # Valves with flow rate of 0 are useless to open, so they should be condensed into one path leading to a valve with
     # a flow rate > 0.
     collapse(graph, valves, START_VALVE)
-    print(graph)
 
     # Part 1: Most pressure released
     # All valves are equidistant and require 1 minute to travel between
