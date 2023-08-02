@@ -16,7 +16,6 @@ START_VALVE: str = "AA"
 class Valve:
     name: str
     flow: int
-    opened: bool = False
 
     @classmethod
     def from_line(cls, line: str) -> Self:
@@ -25,10 +24,6 @@ class Valve:
         flow_rate = re.search(r"\d+", line)
         flow_rate = int(flow_rate.group(0)) if flow_rate is not None else 0
         return cls(name, flow_rate)
-
-    def open(self) -> None:
-        """Open the valve."""
-        self.opened = True
 
 
 Tunnel: TypeAlias = tuple[Valve, int]
@@ -51,6 +46,44 @@ def collapse(graph: ValveSystem, valves: dict[str, Valve], start: str) -> None:
         del graph[valve.name]
 
 
+def most_pressure(time: int, pos: str, graph: ValveSystem, visited: tuple, cache: dict[tuple, int]) -> int:
+    """Returns the most pressure that can be released in 'time' minutes given the condensed graph."""
+
+    def new_visited(v: str) -> tuple:
+        s = [_ for _ in visited] + [v]
+        s.sort()
+        return tuple(s)
+
+    state = (time, pos, visited)
+    if state in cache:
+        return cache[state]
+
+    pressure = 0
+    for valve, cost in graph[pos]:
+        # Don't reopen closed valves
+        if valve.name in visited:
+            continue
+
+        # First option: open
+        time_remaining = time - cost - 1
+        current_pressure = valve.flow * time_remaining
+        opened_pressure = 0
+        if time_remaining > 0:
+            opened_pressure = (
+                most_pressure(time_remaining, valve.name, graph, new_visited(valve.name), cache) + current_pressure
+            )
+
+        # Second option: pass
+        passed_pressure = 0
+        if time - cost > 0:
+            passed_pressure = most_pressure(time - cost, valve.name, graph, visited, cache)
+
+        pressure = max(pressure, opened_pressure, passed_pressure)
+
+    cache[state] = pressure
+    return pressure
+
+
 # Main
 if __name__ == "__main__":
     # Parse input
@@ -71,10 +104,12 @@ if __name__ == "__main__":
     # Valves with flow rate of 0 are useless to open, so they should be condensed into one path leading to a valve with
     # a flow rate > 0.
     collapse(graph, valves, START_VALVE)
+    print(graph)
 
     # Part 1: Most pressure released
     # All valves are equidistant and require 1 minute to travel between
     # All valves take one minute to open
     # Pressure is calculated by multiplying flow rate by time open
+    total_pressure = most_pressure(TIME_LIMIT, START_VALVE, graph, tuple(), dict())
 
-    print(f"The most pressure that can be released in {TIME_LIMIT} minutes is {0}")
+    print(f"The most pressure that can be released in {TIME_LIMIT} minutes is {total_pressure}")
