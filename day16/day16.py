@@ -31,81 +31,50 @@ class Valve:
         self.opened = True
 
 
-ValveSystem: TypeAlias = dict[str, list[Valve]]
+Tunnel: TypeAlias = tuple[Valve, int]
+ValveSystem: TypeAlias = dict[str, list[Tunnel]]
 
 
-class Walker:
-    """Moves through the tunnel system to find the best path."""
+def collapse(graph: ValveSystem, valves: dict[str, Valve], start: str) -> None:
+    """Collapse the graph to remove unnecessary 0 flow nodes. Does not remove start position."""
 
-    def __init__(self, time_limit: int, graph: ValveSystem, start_pos: str) -> None:
-        self.time_remaining: int = time_limit
-        self.graph: ValveSystem = graph
-        self.pos: str = start_pos
-        self.pressure: dict[str, int] = {}
+    for valve in valves.values():
+        # Don't collapse non-zero flow or start pos
+        if valve.flow != 0 or valve.name == start:
+            continue
 
-    def finished(self) -> bool:
-        return self.time_remaining <= 0
-
-    def move(self) -> None:
-        """Take a step through the valve system."""
-
-        print(self.pos, self.pressure.get(self.pos))
-
-        if self.time_remaining == 0:
-            raise StopIteration("Time out!")
-
-        # Explore paths with highest flow rate
-        options = self.graph[self.pos]
-        for valve in options:
-            # Opening would take too much time
-            if not valve.opened and self.time_remaining - 2 < 0:
-                break
-
-            # Take the highest flow rate option that is not already opened
-            if not valve.opened and valve.flow > 0:
-                self.pos = valve.name
-                valve.open()  # Open the valve
-                self.time_remaining -= 2  # Decrease time taken to move to valve and open it
-                self.pressure[valve.name] = valve.flow * self.time_remaining  # Record points from when valve is open
-                return
-
-        # No valves were closed
-        for valve in options:
-            if not valve.opened:
-                self.time_remaining -= 1
-                self.pos = valve.name
-                return
-
-    def pressure_released(self) -> int:
-        """Returns the total pressure released so far."""
-        return sum(self.pressure.values())
+        tunnels = graph[valve.name]
+        for v, cost in tunnels:
+            tunnels_except_self = [(v, c + cost) for v, c in filter(lambda x: x[0].name != v.name, tunnels)]
+            graph[v.name] = list(filter(lambda x: x[0].name != valve.name, graph[v.name]))
+            graph[v.name].extend(tunnels_except_self)
+        del graph[valve.name]
 
 
 # Main
 if __name__ == "__main__":
     # Parse input
+    valves: dict[str, Valve] = {}
+    graph: ValveSystem = {}
     with open("./example.txt", "r") as file:
-        # Create valves
-        valves: dict[str, Valve] = {}
         for line in file:
             valve = Valve.from_line(line)
             valves[valve.name] = valve
 
         # Create graph
         file.seek(0)
-        graph: ValveSystem = {}
         for line in file:
             connections = re.findall(r"[A-Z]{2}", line)
-            graph[connections[0]] = [valves[con] for con in connections[1:]]
-            graph[connections[0]].sort(key=lambda x: x.flow, reverse=True)  # Sort from highest to lowest flow
+            graph[connections[0]] = [(valves[con], 1) for con in connections[1:]]  # All tunnels have a cost of 1
+
+    # Collapse graph
+    # Valves with flow rate of 0 are useless to open, so they should be condensed into one path leading to a valve with
+    # a flow rate > 0.
+    collapse(graph, valves, START_VALVE)
 
     # Part 1: Most pressure released
     # All valves are equidistant and require 1 minute to travel between
     # All valves take one minute to open
     # Pressure is calculated by multiplying flow rate by time open
 
-    walker = Walker(TIME_LIMIT, graph, START_VALVE)
-    while not walker.finished():
-        walker.move()
-
-    print(f"The most pressure that can be released in {TIME_LIMIT} minutes is {walker.pressure_released()}")
+    print(f"The most pressure that can be released in {TIME_LIMIT} minutes is {0}")
