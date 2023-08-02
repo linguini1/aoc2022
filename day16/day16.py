@@ -9,6 +9,7 @@ from dataclasses import dataclass
 # Constants
 TIME_LIMIT: int = 30
 START_VALVE: str = "AA"
+ELEPHANT_TIME: int = 4
 
 
 # Utilities
@@ -46,7 +47,7 @@ def collapse(graph: ValveSystem, valves: dict[str, Valve], start: str) -> None:
         del graph[valve.name]
 
 
-def most_pressure(time: int, pos: str, graph: ValveSystem, opened: tuple, cache: dict[tuple, int]) -> int:
+def most_pressure(time: int, pos: str, graph: ValveSystem, opened: tuple, cache: dict[tuple, int], others: int) -> int:
     """Returns the most pressure that can be released in 'time' minutes given the condensed graph."""
 
     def add_opened(v: str) -> tuple:
@@ -54,27 +55,28 @@ def most_pressure(time: int, pos: str, graph: ValveSystem, opened: tuple, cache:
         s.sort()
         return tuple(s)
 
-    if time <= 0:
-        return 0
-
-    state = (time, pos, opened)
+    state = (time, pos, others, opened)
     if state in cache:
         return cache[state]
 
+    if time <= 0:
+        if others == 0:
+            return 0
+        return most_pressure(TIME_LIMIT - (others * ELEPHANT_TIME), START_VALVE, graph, opened, cache, others - 1)
+
     pressure = 0
     for valve, cost in graph[pos]:
-
         # First option: open; Don't reopen closed valves
         if valve.name not in opened:
-            time_remaining = time - cost - 1
-            current_pressure = valve.flow * time_remaining
+            time_rem = time - cost - 1
+            current_pressure = valve.flow * time_rem
             pressure = max(
                 pressure,
-                most_pressure(time_remaining, valve.name, graph, add_opened(valve.name), cache) + current_pressure,
+                current_pressure + most_pressure(time_rem, valve.name, graph, add_opened(valve.name), cache, others)
             )
 
         # Second option: pass
-        pressure = max(pressure, most_pressure(time - cost, valve.name, graph, opened, cache))
+        pressure = max(pressure, most_pressure(time - cost, valve.name, graph, opened, cache, others))
 
     cache[state] = pressure
     return pressure
@@ -85,7 +87,7 @@ if __name__ == "__main__":
     # Parse input
     valves: dict[str, Valve] = {}
     graph: ValveSystem = {}
-    with open("./example.txt", "r") as file:
+    with open("./input.txt", "r") as file:
         for line in file:
             valve = Valve.from_line(line)
             valves[valve.name] = valve
@@ -105,6 +107,11 @@ if __name__ == "__main__":
     # All valves are equidistant and require 1 minute to travel between
     # All valves take one minute to open
     # Pressure is calculated by multiplying flow rate by time open
-    total_pressure = most_pressure(TIME_LIMIT, START_VALVE, graph, tuple(), dict())
-
+    total_pressure = most_pressure(TIME_LIMIT, START_VALVE, graph, tuple(), dict(), 0)
     print(f"The most pressure that can be released in {TIME_LIMIT} minutes is {total_pressure}")
+
+    # Part 2: Request help from the elephant
+    # Takes 4 minutes to teach the elephant how to help
+    # After 4 minutes, you and the elephant work simultaneously
+    total_help_pressure = most_pressure(TIME_LIMIT - ELEPHANT_TIME, START_VALVE, graph, tuple(), dict(), 1)
+    print(f"The most pressure that can be released in {TIME_LIMIT} minutes with the elephant is {total_help_pressure}")
