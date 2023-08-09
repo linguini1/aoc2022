@@ -5,14 +5,15 @@ from typing import Literal, TypeAlias, Iterable, Optional
 
 # All rocks relative to bottom leftmost edge
 Coordinate: TypeAlias = tuple[int, int]
+Rock: TypeAlias = set[Coordinate]
 JetStream: TypeAlias = list[Literal[1, -1]]
 
-HORIZONTAL: tuple[Coordinate, Coordinate, Coordinate, Coordinate] = ((0, 0), (1, 0), (2, 0), (3, 0))
-PLUS: tuple[Coordinate, Coordinate, Coordinate, Coordinate, Coordinate] = ((0, 1), (1, 0), (1, 1), (1, 2), (2, 1))
-L: tuple[Coordinate, Coordinate, Coordinate, Coordinate, Coordinate] = ((0, 0), (1, 0), (2, 0), (2, 1), (2, 2))
-VERTICAL: tuple[Coordinate, Coordinate, Coordinate, Coordinate] = ((0, 0), (0, 1), (0, 2), (0, 3))
-CUBE: tuple[Coordinate, Coordinate, Coordinate, Coordinate] = ((0, 0), (0, 1), (1, 0), (1, 1))
-ROCKS: list[tuple[Coordinate, ...]] = [HORIZONTAL, PLUS, L, VERTICAL, CUBE]
+HORIZONTAL: Rock = {(0, 0), (1, 0), (2, 0), (3, 0)}
+PLUS: Rock = {(0, 1), (1, 0), (1, 1), (1, 2), (2, 1)}
+L: Rock = {(0, 0), (1, 0), (2, 0), (2, 1), (2, 2)}
+VERTICAL: Rock = {(0, 0), (0, 1), (0, 2), (0, 3)}
+CUBE: Rock = {(0, 0), (0, 1), (1, 0), (1, 1)}
+ROCKS: list[Rock] = [HORIZONTAL, PLUS, L, VERTICAL, CUBE]
 
 CHAMBER_WIDTH: int = 7
 LFT_OFF: int = 2
@@ -20,54 +21,59 @@ BTM_OFF: int = 3
 ROCKS_TO_FALL: int = 2022
 
 
-dropped_rocks = []
-
-
 def translate_coord(coord: Coordinate, offset: Coordinate) -> Coordinate:
+    """Returns the translated coordinate."""
     return (coord[0] + offset[0], coord[1] + offset[1])
 
 
-def translate(rock: Iterable[Coordinate], offset: Coordinate) -> tuple[Coordinate, ...]:
-    return tuple(translate_coord(c, offset) for c in rock)
+def translate(rock: Iterable[Coordinate], offset: Coordinate) -> Rock:
+    """Returns the translated rock."""
+    return set(translate_coord(c, offset) for c in rock)
 
 
-def drop_rock(cur_rock: int, cur_jet: int, topology: list[int], jet_stream: JetStream) -> int:
+def height(occupied: set[Coordinate]) -> int:
+    """Returns the height of the rock tower so far."""
+    return max(occupied, key=lambda x: x[1])[1]
+
+
+def drop_rock(cur_rock: int, cur_jet: int, jet_stream: JetStream, occupied: set[Coordinate]) -> int:
     """Does one dropped rock cycle and returns the current jet."""
 
-    rock = translate(ROCKS[cur_rock], (LFT_OFF, max(topology) + BTM_OFF))  # 2 from left, 3 above highest rock
+    # Translate rock away from side and highest rock to start
+    rock = translate(ROCKS[cur_rock], (LFT_OFF, height(occupied) + BTM_OFF + 1))
     while True:
         # Push rock first
         push = jet_stream[cur_jet]
         translated_rock = translate(rock, (push, 0))
-        if all(0 <= x < CHAMBER_WIDTH and y >= topology[x] for x, y in translated_rock):
+
+        # Only push rock if it does not hit another rock and does not exceed walls
+        if not occupied & translated_rock and all(0 <= x < CHAMBER_WIDTH for x, _ in translated_rock):
             rock = translated_rock
 
         # Translate rock downward
         translated_rock = translate(rock, (0, -1))
-        if not all(y >= topology[x] for x, y in translated_rock):
-            for x, y in rock:
-                topology[x] = max(topology[x], y + 1)
-            dropped_rocks.append(rock)
-            return (cur_jet + 1) % len(jet_stream)
+        if occupied & translated_rock:  # If the rock will intersect with another...
+            occupied.update(rock)  # Record rock spaces as occupied
+            return (cur_jet + 1) % len(jet_stream)  # Return next jet
         rock = translated_rock
 
         cur_jet = (cur_jet + 1) % len(jet_stream)
 
 
-def print_image(topology: list[int], cur_rock: Optional[tuple[Coordinate, ...]] = None) -> None:
-    height = max(topology) + BTM_OFF
+def print_image(occupied: set[Coordinate], cur_rock: Optional[Rock] = None) -> None:
+    """Prints the rock stack in the same format as Advent of Code's example."""
+    h = height(occupied) + BTM_OFF
     if cur_rock is not None:
-        height += max(cur_rock, key=lambda x: x[1])[1] - max(topology)
+        h += max(cur_rock, key=lambda x: x[1])[1] - (h - BTM_OFF)
 
-    image = [["." for _ in range(CHAMBER_WIDTH)] for _ in range(height)]
-    for rock in dropped_rocks:
-        for c in rock:
-            image[(height - 1) - c[1]][c[0]] = "#"
+    image = [["." for _ in range(CHAMBER_WIDTH)] for _ in range(h)]
+    for x, y in occupied:
+        image[(h - 1) - y][x] = "#"
 
     # Add current rock
     if cur_rock is not None:
-        for c in cur_rock:
-            image[(height - 1) - c[1]][c[0]] = "@"
+        for x, y in cur_rock:
+            image[(h - 1) - y][x] = "@"
 
     # Print
     for row in image:
@@ -80,18 +86,18 @@ def print_image(topology: list[int], cur_rock: Optional[tuple[Coordinate, ...]] 
 if __name__ == "__main__":
     # Parse input
     jet_stream: JetStream = []
-    with open("./example.txt") as file:
+    with open("./input.txt") as file:
         jet_stream = list(map(lambda x: 1 if x == ">" else -1, file.read().strip()))
 
     # Part 1: How tall is the tower after 2022 rocks have fallen?
     cur_rock = 0
     cur_jet = 0
     total_rocks = 0
-    topology = [0 for _ in range(CHAMBER_WIDTH)]
+    occupied: set[Coordinate] = set((_, 0) for _ in range(CHAMBER_WIDTH))
 
     while total_rocks < ROCKS_TO_FALL:
-        cur_jet = drop_rock(cur_rock, cur_jet, topology, jet_stream)
+        cur_jet = drop_rock(cur_rock, cur_jet, jet_stream, occupied)
         cur_rock = (cur_rock + 1) % len(ROCKS)
         total_rocks += 1
 
-    print(f"The tower of rocks will be {max(topology)} units tall after {ROCKS_TO_FALL} rocks have stopped falling.")
+    print(f"The tower of rocks will be {height(occupied)} units tall after {ROCKS_TO_FALL} rocks have stopped falling.")
