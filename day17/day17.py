@@ -1,7 +1,7 @@
 # Advent of Code: Day 17
 __author__ = "Matteo Golin"
 
-from typing import Literal, TypeAlias, Iterable
+from typing import Literal, TypeAlias, Iterable, Optional
 
 # All rocks relative to bottom leftmost edge
 Coordinate: TypeAlias = tuple[int, int]
@@ -18,8 +18,9 @@ CHAMBER_WIDTH: int = 7
 LFT_OFF: int = 2
 BTM_OFF: int = 3
 ROCKS_TO_FALL: int = 2022
-ROCKS_TO_FALL = 10
-DROPPED_ROCKS = []
+
+
+dropped_rocks = []
 
 
 def translate_coord(coord: Coordinate, offset: Coordinate) -> Coordinate:
@@ -33,27 +34,46 @@ def translate(rock: Iterable[Coordinate], offset: Coordinate) -> tuple[Coordinat
 def drop_rock(cur_rock: int, cur_jet: int, topology: list[int], jet_stream: JetStream) -> int:
     """Does one dropped rock cycle and returns the current jet."""
 
-    rock = translate(ROCKS[cur_rock], (LFT_OFF, BTM_OFF + max(topology)))  # 2 from left, 3 above highest rock
+    rock = translate(ROCKS[cur_rock], (LFT_OFF, max(topology) + BTM_OFF))  # 2 from left, 3 above highest rock
     while True:
-        # Check for space on the sides
+        # Push rock first
         push = jet_stream[cur_jet]
-        print(rock, push)
-        if all(0 <= cell[0] + push < CHAMBER_WIDTH and cell[1] >= topology[cell[0] + push] for cell in rock):
-            rock = translate(rock, (push, 0))
+        translated_rock = translate(rock, (push, 0))
+        if all(0 <= x < CHAMBER_WIDTH and y >= topology[x] for x, y in translated_rock):
+            rock = translated_rock
 
-        # Check for space downward
-        for cell in rock:
-            translated = translate_coord(cell, (0, -1))
-            if topology[translated[0]] > translated[1]:  # Rock has landed
-                for c in rock:
-                    topology[c[0]] = max(topology[c[0]], c[1] + 1)  # Replace with highest point
-                print(rock)
-                DROPPED_ROCKS.append(rock)
-                print(topology)
-                return (cur_jet + 1) % len(jet_stream)
-        rock = translate(rock, (0, -1))
+        # Translate rock downward
+        translated_rock = translate(rock, (0, -1))
+        if not all(y >= topology[x] for x, y in translated_rock):
+            for x, y in rock:
+                topology[x] = max(topology[x], y + 1)
+            dropped_rocks.append(rock)
+            return (cur_jet + 1) % len(jet_stream)
+        rock = translated_rock
 
-        cur_jet = (cur_jet + 1) % len(jet_stream)  # Get next jet move
+        cur_jet = (cur_jet + 1) % len(jet_stream)
+
+
+def print_image(topology: list[int], cur_rock: Optional[tuple[Coordinate, ...]] = None) -> None:
+    height = max(topology) + BTM_OFF
+    if cur_rock is not None:
+        height += max(cur_rock, key=lambda x: x[1])[1] - max(topology)
+
+    image = [["." for _ in range(CHAMBER_WIDTH)] for _ in range(height)]
+    for rock in dropped_rocks:
+        for c in rock:
+            image[(height - 1) - c[1]][c[0]] = "#"
+
+    # Add current rock
+    if cur_rock is not None:
+        for c in cur_rock:
+            image[(height - 1) - c[1]][c[0]] = "@"
+
+    # Print
+    for row in image:
+        for char in row:
+            print(char, end="")
+        print()
 
 
 # Main
@@ -61,7 +81,7 @@ if __name__ == "__main__":
     # Parse input
     jet_stream: JetStream = []
     with open("./example.txt") as file:
-        jet_stream = list(map(lambda x: 1 if x == ">" else -1, file.read()))
+        jet_stream = list(map(lambda x: 1 if x == ">" else -1, file.read().strip()))
 
     # Part 1: How tall is the tower after 2022 rocks have fallen?
     cur_rock = 0
@@ -73,15 +93,5 @@ if __name__ == "__main__":
         cur_jet = drop_rock(cur_rock, cur_jet, topology, jet_stream)
         cur_rock = (cur_rock + 1) % len(ROCKS)
         total_rocks += 1
-
-    image = [["." for _ in range(CHAMBER_WIDTH)] for _ in range(max(topology) + BTM_OFF)]
-    for rock in DROPPED_ROCKS:
-        for c in rock:
-            image[-c[1] - 1][c[0]] = "#"
-
-    for row in image:
-        for char in row:
-            print(char, end="")
-        print()
 
     print(f"The tower of rocks will be {max(topology)} units tall after {ROCKS_TO_FALL} rocks have stopped falling.")
