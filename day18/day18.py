@@ -37,6 +37,17 @@ class Coordinate:
     def __str__(self) -> str:
         return f"({self.x}, {self.y}, {self.z})"
 
+    def __getitem__(self, idx: int) -> int:
+        match idx:
+            case 0:
+                return self.x
+            case 1:
+                return self.y
+            case 2:
+                return self.z
+            case _:
+                raise IndexError(f"Index {idx} is out of bounds.")
+
     __repr__ = __str__
 
 
@@ -65,11 +76,48 @@ def surface_area(coords: set[Coordinate]) -> int:
     return sa
 
 
+def sa_minus_pockets(coords: set[Coordinate]) -> int:
+    """Returns the total external surface area of the drop (does not include trapped air pockets)."""
+
+    # Find the maximum and minimum exterior starting point
+    max_coord: Coordinate = Coordinate(*(max(c[i] + 1 for c in coords) for i in range(3)))
+    min_coord: Coordinate = Coordinate(*(min(c[i] - 1 for c in coords) for i in range(3)))
+
+    # Perform bfs
+    visited: set[Coordinate] = set()
+    queue = [max_coord]
+
+    sa = 0
+    while queue:
+        cur = queue.pop(0)
+
+        # If it's part of the shape's exterior, increment surface area
+        if cur in coords:
+            sa += 1
+            continue
+
+        # Check all unvisited cubes' neighbours
+        if cur not in visited:
+            visited.add(cur)
+            for neighbour in cur.neighbours():
+                # Only check the neighbour if it is within the droplet's area
+                if all(min_coord[i] <= neighbour[i] <= max_coord[i] for i in range(3)):
+                    queue.append(neighbour)
+
+    return sa
+
+
 # Main
 def main():
-    print("Part 1: What is the surface area of the lava droplet")
+    print("Part 1: What is the surface area of the lava droplet.")
     print(f"TEST: {surface_area(parse_input('test.txt'))}")
     print(surface_area(parse_input("input.txt")))
+    print()
+
+    # Approach: Look for all outer surfaces instead of looking for inner pockets
+    print("Part 2: What is the external surface area of the lava droplet (excluding pockets).")
+    print(f"TEST: {sa_minus_pockets(parse_input('test.txt'))}")
+    print(sa_minus_pockets(parse_input("input.txt")))
 
 
 if __name__ == "__main__":
